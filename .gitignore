@@ -11,3 +11,9 @@ relay_stats.json
 .DS_Store
 *.swp
 *~
+
+# Python and debug scripts
+__pycache__/
+*.pyc
+debug_log.py
+extreme_test.py
