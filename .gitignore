@@ -1,0 +1,13 @@
+# Build artifacts
+sender
+receiver
+*.o
+
+# Harness output
+playout_log.json
+relay_stats.json
+
+# OS / editor
+.DS_Store
+*.swp
+*~
