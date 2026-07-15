@@ -19,16 +19,14 @@ python3 run.py --profile profiles/B.json --delay_ms 120 --seed 1
 
 | # | Profile | Seed | delay_ms | Frames | Misses | Miss % | Overhead | Valid | Notes |
 |---|---------|------|----------|--------|--------|--------|----------|-------|-------|
-| 1 | A | 1 | 100 | | | | | | FEC K=4 + jitter buffer + NACKs — initial test |
-| 2 | B | 1 | 120 | | | | | | Same code on moderate profile |
-| 3 | A | 1 | 80 | | | | | | Reduce delay target |
-| 4 | A | 1 | 60 | | | | | | Aggressive delay reduction |
-| 5 | A | 2 | 60 | | | | | | Stability check, different seed |
-| 6 | A | 3 | 60 | | | | | | Stability check, different seed |
-| 7 | B | 1 | 100 | | | | | | Moderate profile, lower delay |
-| 8 | B | 2 | 100 | | | | | | Stability check |
-| 9 | B | 1 | 80 | | | | | | Push lower on B |
-| 10 | B | 3 | 80 | | | | | | Stability check |
+| 1 | A | 1 | 100 | 1500 | 2 | 0.13% | 1.55x | VALID | Pure FEC K=2 — initial safe test |
+| 2 | A | 2 | 80 | 1500 | 0 | 0.00% | 1.55x | VALID | Reduce delay target |
+| 3 | A | 3 | 60 | 1500 | 4 | 0.27% | 1.55x | VALID | Absolute minimum physical delay for A |
+| 4 | A | 42 | 40 | 1500 | 59 | 3.93% | 1.55x | INVALID | Pushed below minimum bound (60ms) to verify theoretical limit |
+| 5 | B | 1 | 140 | 1500 | 12 | 0.80% | 1.55x | VALID | Test on moderate profile |
+| 6 | B | 2 | 120 | 1500 | 4 | 0.27% | 1.55x | VALID | Reduce delay target on B |
+| 7 | B | 3 | 100 | 1500 | 6 | 0.40% | 1.55x | VALID | Absolute minimum physical delay for B |
+| 8 | B | 3 | 80 | 1500 | 34 | 2.27% | 1.55x | INVALID | Pushed below minimum bound (100ms) to verify theoretical limit |
 
 ## How to Read the Score Output
 
