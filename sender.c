@@ -48,7 +48,7 @@
 #define PKT_RETRANSMIT 0x03
 #define PKT_NACK       0x04
 
-#define FEC_K          4      /* parity group size */
+#define FEC_K          2      /* parity group size */
 #define HDR_LEN        5      /* type(1) + seq(4) */
 #define WIRE_PKT       165    /* 5 + 160 */
 #define NACK_PKT_LEN   5      /* type(1) + seq(4) */

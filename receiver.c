@@ -21,7 +21,7 @@
 #define PKT_RETRANSMIT 0x03
 #define PKT_NACK       0x04
 
-#define FEC_K          4
+#define FEC_K          2
 #define HDR_LEN        5
 #define WIRE_PKT       165
 #define NACK_PKT_LEN   5
@@ -186,7 +186,7 @@ int main(void) {
             
             if (age > nack_threshold && age < delay_s) {
                 if (nack_count[i] == 0 || (nack_count[i] == 1 && age > nack_threshold * 2)) {
-                    send_nack((uint32_t)i);
+                    // send_nack((uint32_t)i); // DISABLED NACKs to save bandwidth
                     nack_count[i]++;
                 }
             }
