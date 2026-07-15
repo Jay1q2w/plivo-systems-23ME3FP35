@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Flaky Network — Architecture &amp; Design Summary</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --card: #1a1d28;
+            --border: #2a2d3a;
+            --accent: #6c63ff;
+            --accent2: #00d2ff;
+            --text: #e4e4e7;
+            --muted: #9ca3af;
+            --green: #22c55e;
+            --red: #ef4444;
+            --orange: #f59e0b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            padding: 2rem;
+        }
+        .container { max-width: 960px; margin: 0 auto; }
+
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.3rem;
+        }
+        .subtitle { color: var(--muted); font-size: 1rem; margin-bottom: 2.5rem; }
+
+        h2 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--accent2);
+            margin: 2.5rem 0 1rem;
+            padding-bottom: 0.4rem;
+            border-bottom: 1px solid var(--border);
+        }
+        h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 1.5rem 0 0.6rem;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+
+        pre {
+            background: #12141e;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem 1.2rem;
+            overflow-x: auto;
+            font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #c9d1d9;
+            margin: 0.8rem 0;
+        }
+        code {
+            font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+            background: rgba(108, 99, 255, 0.15);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        pre code { background: none; padding: 0; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.92rem;
+        }
+        th {
+            background: rgba(108, 99, 255, 0.2);
+            text-align: left;
+            padding: 0.6rem 0.8rem;
+            font-weight: 600;
+            border-bottom: 2px solid var(--accent);
+        }
+        td {
+            padding: 0.5rem 0.8rem;
+            border-bottom: 1px solid var(--border);
+        }
+        tr:hover td { background: rgba(108, 99, 255, 0.05); }
+
+        .tag {
+            display: inline-block;
+            padding: 0.15em 0.6em;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
+        .tag-green  { background: rgba(34,197,94,0.15);  color: var(--green);  }
+        .tag-orange { background: rgba(245,158,11,0.15); color: var(--orange); }
+        .tag-red    { background: rgba(239,68,68,0.15);  color: var(--red);    }
+        .tag-blue   { background: rgba(0,210,255,0.15);  color: var(--accent2);}
+
+        .diagram {
+            background: #12141e;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.82rem;
+            line-height: 1.8;
+            overflow-x: auto;
+            white-space: pre;
+            color: #c9d1d9;
+        }
+
+        ul { padding-left: 1.5rem; margin: 0.5rem 0; }
+        li { margin: 0.3rem 0; }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        .metric {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.2rem;
+            text-align: center;
+        }
+        .metric .value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .metric .label { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
+
+        .flow-arrow { color: var(--accent); font-weight: bold; }
+        .highlight  { color: var(--accent2); font-weight: 600; }
+
+        footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 0.85rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>The Flaky Network</h1>
+    <p class="subtitle">Architecture &amp; Design Choices — Real-Time UDP Stream Recovery</p>
+
+    <!-- ============================================================ -->
+    <h2>1. Problem Statement</h2>
+    <div class="card">
+        <p>A source produces one <strong>160-byte frame every 20 ms</strong> (simulating live audio).
+           Frames must cross a <strong>hostile UDP relay</strong> that drops, delays, reorders, and
+           duplicates packets, and be played out on a steady 20 ms clock at the receiver.
+           We build the <strong>sender</strong> and <strong>receiver</strong> programs that sit on
+           either side of this relay.</p>
+    </div>
+
+    <div class="metric-grid">
+        <div class="metric">
+            <div class="value">160 B</div>
+            <div class="label">Frame Size</div>
+        </div>
+        <div class="metric">
+            <div class="value">20 ms</div>
+            <div class="label">Frame Interval</div>
+        </div>
+        <div class="metric">
+            <div class="value">≤ 1%</div>
+            <div class="label">Miss Rate Cap</div>
+        </div>
+        <div class="metric">
+            <div class="value">≤ 2.0×</div>
+            <div class="label">Overhead Cap</div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>2. System Architecture</h2>
+
+    <div class="diagram">
+┌─────────────┐     ┌──────────────┐     ┌───────────┐     ┌──────────────┐     ┌─────────────┐
+│   HARNESS   │     │    YOUR      │     │  HOSTILE   │     │    YOUR      │     │   HARNESS   │
+│   SOURCE    │────▶│   SENDER     │────▶│   RELAY    │────▶│   RECEIVER   │────▶│   PLAYER    │
+│             │47010│              │47001│            │47002│              │47020│             │
+└─────────────┘     └──────┬───────┘     └──────┬─────┘     └──────┬───────┘     └─────────────┘
+                           │                    │                  │
+                           │      47004         │       47003      │
+                           └────────────────────┴──────────────────┘
+                                   ◄── feedback path (NACKs) ──▶
+    </div>
+
+    <div class="card">
+        <h3>Port Map</h3>
+        <table>
+            <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+            <tr><td><code>47010</code></td><td>Harness → Sender</td><td>Raw frames (4B seq + 160B payload)</td></tr>
+            <tr><td><code>47001</code></td><td>Sender → Relay</td><td>DATA / PARITY / RETRANSMIT packets</td></tr>
+            <tr><td><code>47002</code></td><td>Relay → Receiver</td><td>Forwarded media packets (impaired)</td></tr>
+            <tr><td><code>47020</code></td><td>Receiver → Player</td><td>Played-out frames (harness format)</td></tr>
+            <tr><td><code>47003</code></td><td>Receiver → Relay</td><td>NACK requests (feedback)</td></tr>
+            <tr><td><code>47004</code></td><td>Relay → Sender</td><td>Forwarded NACKs (impaired)</td></tr>
+        </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>3. Wire Protocol Design</h2>
+
+    <div class="card">
+        <p>All sender→receiver packets share a <strong>5-byte header</strong>
+           (type + 4-byte big-endian sequence/ID), followed by 160 bytes of payload,
+           totaling <strong>165 bytes</strong>. This minimal header was chosen to
+           conserve the 2.0× bandwidth budget.</p>
+
+        <h3>Packet Types</h3>
+        <table>
+            <tr><th>Type</th><th>Code</th><th>Size</th><th>Seq Field Contains</th><th>Payload</th></tr>
+            <tr>
+                <td><span class="tag tag-green">DATA</span></td>
+                <td><code>0x01</code></td>
+                <td>165 B</td>
+                <td>Frame sequence number</td>
+                <td>Original 160-byte frame</td>
+            </tr>
+            <tr>
+                <td><span class="tag tag-blue">PARITY</span></td>
+                <td><code>0x02</code></td>
+                <td>165 B</td>
+                <td>Group start seq (g × K)</td>
+                <td>XOR of all K payloads in group</td>
+            </tr>
+            <tr>
+                <td><span class="tag tag-orange">RETRANSMIT</span></td>
+                <td><code>0x03</code></td>
+                <td>165 B</td>
+                <td>Frame sequence number</td>
+                <td>Re-sent 160-byte frame</td>
+            </tr>
+            <tr>
+                <td><span class="tag tag-red">NACK</span></td>
+                <td><code>0x04</code></td>
+                <td>5 B</td>
+                <td>Requested seq number</td>
+                <td><em>none</em></td>
+            </tr>
+        </table>
+    </div>
+
+    <pre><code>   0       1       2       3       4       5                   165
+   ┌───────┬───────┬───────┬───────┬───────┬────────────────────┐
+   │ Type  │         Seq (4B BE)           │   Payload (160B)   │
+   │ 1 byte│                               │                    │
+   └───────┴───────┴───────┴───────┴───────┴────────────────────┘</code></pre>
+
+    <!-- ============================================================ -->
+    <h2>4. Loss Recovery: XOR FEC</h2>
+
+    <div class="card">
+        <h3>Why FEC Over Pure Retransmission?</h3>
+        <p>There are only two families of remedies for packet loss:</p>
+        <ul>
+            <li><strong>Forward Error Correction (FEC)</strong> — send redundant data proactively;
+                recovery costs <strong>zero extra RTT</strong>.</li>
+            <li><strong>Automatic Repeat Request (ARQ / NACKs)</strong> — detect loss and request
+                re-send; costs <strong>≥ 1 RTT</strong> (NACK + retransmit, both through hostile relay).</li>
+        </ul>
+        <p>For real-time streaming where every millisecond of latency counts, <strong>FEC is the
+           primary mechanism</strong>. NACKs serve as a backup for the rare multi-loss case.</p>
+    </div>
+
+    <div class="card">
+        <h3>XOR Parity Groups (K = 4)</h3>
+        <p>Every 4 consecutive frames form a <em>FEC group</em>. The sender computes:</p>
+        <pre><code>Parity = P₀ ⊕ P₁ ⊕ P₂ ⊕ P₃</code></pre>
+        <p>If any <strong>single frame</strong> in the group is lost, the receiver recovers it:</p>
+        <pre><code>P_missing = Parity ⊕ P_other₁ ⊕ P_other₂ ⊕ P_other₃</code></pre>
+
+        <h3>Overhead Analysis</h3>
+        <table>
+            <tr><th>Component</th><th>Bytes (30s run, 1500 frames)</th><th>Contribution</th></tr>
+            <tr><td>DATA packets (uplink)</td><td>1500 × 165 = 247,500</td><td>1.031×</td></tr>
+            <tr><td>PARITY packets (uplink)</td><td>375 × 165 = 61,875</td><td>0.258×</td></tr>
+            <tr><td>NACKs (downlink)</td><td>~50 × 5 = 250</td><td>0.001×</td></tr>
+            <tr><td>Retransmits (uplink)</td><td>~20 × 165 = 3,300</td><td>0.014×</td></tr>
+            <tr><th>Total</th><th>~312,925</th><th><strong>~1.30×</strong></th></tr>
+        </table>
+        <p>Well within the 2.0× cap, leaving room for more aggressive profiles.</p>
+
+        <h3>Recovery Probability</h3>
+        <table>
+            <tr><th>Profile</th><th>Loss Rate</th><th>P(2+ losses in K=4 group)</th><th>Expected Unrecoverable</th></tr>
+            <tr>
+                <td>A (mild)</td><td>2%</td><td>0.023%</td>
+                <td>~0.09 frames → <span class="tag tag-green">0.006% miss</span></td>
+            </tr>
+            <tr>
+                <td>B (moderate)</td><td>5%</td><td>1.4%</td>
+                <td>~5.25 frames → <span class="tag tag-orange">0.35% miss</span></td>
+            </tr>
+        </table>
+        <p>Both well under the 1% miss cap, even before NACKs kick in.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. Jitter Buffer &amp; Playout</h2>
+
+    <div class="card">
+        <p>The receiver maintains a <strong>frame buffer</strong> indexed by sequence number.
+           Frames are stored as they arrive (regardless of order) and played out at their
+           deadline:</p>
+        <pre><code>deadline(i) = t0 + DELAY_MS/1000 + i × 0.020 seconds</code></pre>
+
+        <h3>Event Loop Design</h3>
+        <p>The receiver uses <code>select()</code> with a <strong>1 ms max timeout</strong> to
+           alternate between two tasks:</p>
+        <ol>
+            <li><strong>Receive &amp; process</strong>: drain all available packets using
+                <code>MSG_DONTWAIT</code>, store data, update FEC groups, trigger recovery.</li>
+            <li><strong>Playout</strong>: check if any frame deadlines have passed; send available
+                frames to the player, skip misses, advance the playout pointer.</li>
+        </ol>
+        <p>This tight loop ensures sub-millisecond playout precision while remaining responsive
+           to incoming packets for last-moment FEC recovery.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. NACK Retransmission (Fallback)</h2>
+
+    <div class="card">
+        <h3>Receiver Side — NACK Generation</h3>
+        <ul>
+            <li><strong>Gap detection</strong>: when frame <em>S</em> arrives and frames
+                <em>highest+1 … S−1</em> are missing, NACKs are sent immediately.</li>
+            <li><strong>Proactive re-NACKs</strong>: for upcoming frames whose deadlines are
+                within 70% of <code>DELAY_MS</code> but still &gt;10 ms away, re-NACKs
+                are sent (up to 3 attempts per frame).</li>
+        </ul>
+
+        <h3>Sender Side — Retransmission</h3>
+        <ul>
+            <li>A <strong>ring buffer of 4096 slots</strong> stores recent harness frames.</li>
+            <li>On receiving a NACK, the sender looks up the requested seq in the ring buffer
+                and retransmits it as a <code>RETRANSMIT</code> packet.</li>
+            <li>Retransmits use the same wire format as DATA, so the receiver processes them
+                identically (dedup + FEC integration).</li>
+        </ul>
+
+        <h3>RTT Considerations</h3>
+        <p>Both the NACK and the retransmit cross the hostile relay, so minimum RTT is
+           <strong>2 × min_delay</strong> (best case: ~20 ms for profile A, ~40 ms for B).
+           NACKs are most useful when <code>DELAY_MS</code> is large; at very low delays,
+           FEC is the only viable recovery mechanism.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>7. Sender Architecture Detail</h2>
+
+    <div class="card">
+        <h3>Event Loop</h3>
+        <pre><code>for (;;) {
+    select() on { port_47010, port_47004 } with 5ms timeout
+
+    if (frame from harness on 47010):
+        1. Save in ring buffer for retransmission
+        2. Send DATA packet to relay (47001)
+        3. XOR payload into parity accumulator
+        4. If group complete (K frames):
+           → Send PARITY packet to relay
+           → Reset accumulator
+
+    if (NACK from feedback on 47004):
+        1. Look up requested seq in ring buffer
+        2. If found → send RETRANSMIT packet to relay
+}</code></pre>
+
+        <h3>Key Design Decisions</h3>
+        <ul>
+            <li><strong>Immediate forwarding</strong>: each DATA packet is sent the instant the
+                harness delivers it — no buffering delay at the sender.</li>
+            <li><strong>Parity at group boundary</strong>: the parity is sent right after the
+                K-th frame, minimizing the window before the receiver can attempt recovery.</li>
+            <li><strong>Ring buffer validation</strong>: stored seq is checked against the
+                request to avoid stale data after wraparound.</li>
+        </ul>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. Receiver Architecture Detail</h2>
+
+    <div class="card">
+        <h3>Data Structures</h3>
+        <table>
+            <tr><th>Structure</th><th>Size</th><th>Purpose</th></tr>
+            <tr>
+                <td><code>frame_payload[8192][160]</code></td>
+                <td>~1.3 MB</td>
+                <td>Jitter buffer — stores payloads by seq</td>
+            </tr>
+            <tr>
+                <td><code>frame_received[8192]</code></td>
+                <td>32 KB</td>
+                <td>Bitfield — duplicate detection</td>
+            </tr>
+            <tr>
+                <td><code>fec_group_t fec[2049]</code></td>
+                <td>~1.3 MB</td>
+                <td>Per-group: XOR accumulator, parity, recv mask</td>
+            </tr>
+            <tr>
+                <td><code>nack_count[8192]</code></td>
+                <td>32 KB</td>
+                <td>NACK retry counter per frame</td>
+            </tr>
+        </table>
+
+        <h3>FEC Recovery Flow</h3>
+        <pre><code>on receive DATA(seq, payload):
+    if already received → drop (duplicate)
+    store payload in jitter buffer
+    XOR payload into group accumulator
+    mark seq's index in group bitmask
+    try_fec_recovery(group_id)
+
+on receive PARITY(group_start, xor_payload):
+    store parity payload
+    try_fec_recovery(group_id)
+
+try_fec_recovery(gid):
+    if parity received AND exactly K-1 data frames received:
+        missing_payload = parity ⊕ accumulated_xor
+        store recovered frame in jitter buffer</code></pre>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>9. Tuning Parameters</h2>
+
+    <div class="card">
+        <table>
+            <tr><th>Parameter</th><th>Value</th><th>Effect of Change</th></tr>
+            <tr>
+                <td><code>FEC_K</code></td>
+                <td>4</td>
+                <td>↓ K = more redundancy + overhead, better burst recovery<br>
+                    ↑ K = less overhead, but longer FEC recovery window</td>
+            </tr>
+            <tr>
+                <td><code>DELAY_MS</code></td>
+                <td>100 (recommended)</td>
+                <td>Must exceed (K−1)×20 + max_relay_delay for FEC to work</td>
+            </tr>
+            <tr>
+                <td><code>MAX_NACK_PER_FRAME</code></td>
+                <td>3</td>
+                <td>More retries = more chances, but more overhead</td>
+            </tr>
+            <tr>
+                <td><code>select timeout</code></td>
+                <td>1 ms (receiver)</td>
+                <td>Tighter = more precise playout, more CPU usage</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>10. Design Tradeoffs</h2>
+
+    <div class="card">
+        <table>
+            <tr><th>Decision</th><th>Tradeoff</th><th>Rationale</th></tr>
+            <tr>
+                <td>FEC over pure NACK</td>
+                <td>Higher bandwidth vs lower latency</td>
+                <td>Zero-RTT recovery is critical for real-time streaming; NACK RTT often exceeds playout budget</td>
+            </tr>
+            <tr>
+                <td>Consecutive grouping (not interleaved)</td>
+                <td>Simpler code vs burst vulnerability</td>
+                <td>Interleaving increases FEC recovery latency; NACKs cover burst-loss gaps</td>
+            </tr>
+            <tr>
+                <td>K=4</td>
+                <td>25% parity overhead vs recovery capability</td>
+                <td>Sweet spot: handles 5% random loss easily, overhead stays at ~1.31×</td>
+            </tr>
+            <tr>
+                <td>5-byte wire header</td>
+                <td>Minimal metadata vs protocol flexibility</td>
+                <td>FEC group info derived from seq number (group = seq/K), saving 3+ header bytes per packet</td>
+            </tr>
+            <tr>
+                <td>MSG_DONTWAIT drain loop</td>
+                <td>CPU spin vs responsiveness</td>
+                <td>Ensures all queued packets are processed before playout decisions, maximizing FEC recovery window</td>
+            </tr>
+        </table>
+    </div>
+
+    <footer>
+        <p>The Flaky Network — Systems Assignment | Built with C, standard library only (POSIX sockets, select, gettimeofday)</p>
+    </footer>
+
+</div>
+</body>
+</html>
