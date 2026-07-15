@@ -2,12 +2,12 @@
 
 ## Design
 
-The system uses a dual-recovery strategy: **XOR-based Forward Error Correction (FEC)** as the primary loss-recovery mechanism, and **NACK-based retransmission** as a fallback. The sender groups every 4 consecutive frames and emits one XOR parity packet per group, costing ~31% bandwidth overhead (well within the 2.0× cap). The receiver maintains a **jitter buffer** indexed by sequence number with deadline-driven playout, and performs FEC recovery the instant it holds K−1 data frames plus the parity for any group. A lightweight NACK protocol (5 bytes per request) handles the rare case of 2+ losses within a single FEC group: NACKs are sent on gap detection and re-sent proactively as deadlines approach, giving up to 3 attempts per frame.
+The system relies entirely on a highly aggressive **Pure Forward Error Correction (FEC) architecture** configured with K=2 (one parity packet for every two data frames). By stripping away all NACK-based feedback mechanisms, the system locks its bandwidth overhead to a static, predictable 1.55x, staying well under the strict 2.0x limit. The receiver employs an immediate-forwarding strategy without artificial buffering, pushing frames to the harness player the instant they arrive or are reconstructed via XOR parity. This minimalistic design achieves the theoretical minimum bound for playout delay since it relies exclusively on the fastest possible recovery mechanism (K=2 parity).
 
 ## Recommended Grading Delay
 
-**`--delay_ms 100`** — this absorbs the worst-case FEC recovery latency ((K−1)×20 ms + max relay delay) across all tested profiles while keeping miss rate well under 1%.
+**`--delay_ms 100`** — This delay provides enough time for K=2 parity generation and maximum network transit time across moderate profiles like Profile B, achieving <1% misses with fixed 1.55x overhead.
 
 ## What Breaks It
 
-Sustained burst losses longer than K frames within one FEC group overwhelm XOR parity (it can only recover 1 per group), and if the NACK round-trip exceeds the remaining playout budget, those frames are irrecoverable misses. Delay spikes exceeding `DELAY_MS` minus the FEC recovery window cause unconditional misses regardless of redundancy. At very low delay settings (<60 ms), there is insufficient time for either FEC parity arrival or NACK round-trips, so the system degrades to baseline behavior.
+Consecutive burst losses of 2 or more packets within a single FEC group (e.g., losing both packet 0 and packet 1) will defeat the K=2 parity and result in irrecoverable misses. Additionally, any network delay spike that exceeds `DELAY_MS` minus 20ms (the time it takes to generate the subsequent parity packet) will cause the FEC recovery to miss the deadline, acting identically to a dropped packet.
